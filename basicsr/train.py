@@ -183,7 +183,7 @@ def train_pipeline(root_path):
             model.update_learning_rate(current_iter, warmup_iter=opt['train'].get('warmup_iter', -1))
             # training
             model.feed_data(train_data)
-            model.optimize_parameters(current_iter)
+            model.optimize_parameters(current_iter, tb_logger)
             iter_time = time.time() - iter_time
             # log
             if current_iter % opt['logger']['print_freq'] == 0:

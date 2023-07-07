@@ -15,7 +15,7 @@ def normalize(in_channels):
     return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
     
 
-@torch.jit.script
+# @torch.jit.script
 def swish(x):
     return x*torch.sigmoid(x)
 
@@ -382,11 +382,338 @@ class VQAutoEncoder(nn.Module):
                 raise ValueError(f'Wrong params!')
 
 
-    def forward(self, x):
-        x = self.encoder(x)
+    def forward(self, src):
+        x = self.encoder(src)
+        quant, codebook_loss, quant_stats = self.quantize(x)
+        x = self.generator(quant)
+        x = x + src
+        return x, codebook_loss, quant_stats
+
+
+@ARCH_REGISTRY.register()
+class DeblurResVQAutoEncoder(nn.Module):
+    def __init__(self, img_size, nf, ch_mult, quantizer="nearest", res_blocks=2, attn_resolutions=[16], codebook_size=1024, emb_dim=256,
+                beta=0.25, gumbel_straight_through=False, gumbel_kl_weight=1e-8, model_path=None):
+        super().__init__()
+        logger = get_root_logger()
+        self.in_channels = 3 
+        self.nf = nf 
+        self.n_blocks = res_blocks 
+        self.codebook_size = codebook_size
+        self.embed_dim = emb_dim
+        self.ch_mult = ch_mult
+        self.resolution = img_size
+        self.attn_resolutions = attn_resolutions
+        self.quantizer_type = quantizer
+        self.encoder = Encoder(
+            self.in_channels,
+            self.nf,
+            self.embed_dim,
+            self.ch_mult,
+            self.n_blocks,
+            self.resolution,
+            self.attn_resolutions
+        )
+        if self.quantizer_type == "nearest":
+            self.beta = beta #0.25
+            self.quantize = VectorQuantizer(self.codebook_size, self.embed_dim, self.beta)
+        elif self.quantizer_type == "gumbel":
+            self.gumbel_num_hiddens = emb_dim
+            self.straight_through = gumbel_straight_through
+            self.kl_weight = gumbel_kl_weight
+            self.quantize = GumbelQuantizer(
+                self.codebook_size,
+                self.embed_dim,
+                self.gumbel_num_hiddens,
+                self.straight_through,
+                self.kl_weight
+            )
+        self.generator = Generator(
+            self.nf, 
+            self.embed_dim,
+            self.ch_mult, 
+            self.n_blocks, 
+            self.resolution, 
+            self.attn_resolutions
+        )
+
+        if model_path is not None:
+            chkpt = torch.load(model_path, map_location='cpu')
+            if 'params_ema' in chkpt:
+                self.load_state_dict(torch.load(model_path, map_location='cpu')['params_ema'])
+                logger.info(f'vqgan is loaded from: {model_path} [params_ema]')
+            elif 'params' in chkpt:
+                self.load_state_dict(torch.load(model_path, map_location='cpu')['params'])
+                logger.info(f'vqgan is loaded from: {model_path} [params]')
+            else:
+                raise ValueError(f'Wrong params!')
+
+
+    def forward(self, src):
+        x = self.encoder(src)
+        quant, codebook_loss, quant_stats = self.quantize(x)
+        x = self.generator(quant)
+        x = x + src
+        return x, codebook_loss, quant_stats
+
+
+@ARCH_REGISTRY.register()
+class DeblurVQAutoEncoder(nn.Module):
+    def __init__(self, img_size, nf, ch_mult, quantizer="nearest", res_blocks=2, attn_resolutions=[16], codebook_size=1024, emb_dim=256,
+                beta=0.25, gumbel_straight_through=False, gumbel_kl_weight=1e-8, model_path=None):
+        super().__init__()
+        logger = get_root_logger()
+        self.in_channels = 3 
+        self.nf = nf 
+        self.n_blocks = res_blocks 
+        self.codebook_size = codebook_size
+        self.embed_dim = emb_dim
+        self.ch_mult = ch_mult
+        self.resolution = img_size
+        self.attn_resolutions = attn_resolutions
+        self.quantizer_type = quantizer
+        self.encoder = Encoder(
+            self.in_channels,
+            self.nf,
+            self.embed_dim,
+            self.ch_mult,
+            self.n_blocks,
+            self.resolution,
+            self.attn_resolutions
+        )
+        if self.quantizer_type == "nearest":
+            self.beta = beta #0.25
+            self.quantize = VectorQuantizer(self.codebook_size, self.embed_dim, self.beta)
+        elif self.quantizer_type == "gumbel":
+            self.gumbel_num_hiddens = emb_dim
+            self.straight_through = gumbel_straight_through
+            self.kl_weight = gumbel_kl_weight
+            self.quantize = GumbelQuantizer(
+                self.codebook_size,
+                self.embed_dim,
+                self.gumbel_num_hiddens,
+                self.straight_through,
+                self.kl_weight
+            )
+        self.generator = Generator(
+            self.nf, 
+            self.embed_dim,
+            self.ch_mult, 
+            self.n_blocks, 
+            self.resolution, 
+            self.attn_resolutions
+        )
+
+        if model_path is not None:
+            chkpt = torch.load(model_path, map_location='cpu')
+            if 'params_ema' in chkpt:
+                self.load_state_dict(torch.load(model_path, map_location='cpu')['params_ema'])
+                logger.info(f'vqgan is loaded from: {model_path} [params_ema]')
+            elif 'params' in chkpt:
+                self.load_state_dict(torch.load(model_path, map_location='cpu')['params'])
+                logger.info(f'vqgan is loaded from: {model_path} [params]')
+            else:
+                raise ValueError(f'Wrong params!')
+
+
+    def forward(self, src):
+        x = self.encoder(src)
         quant, codebook_loss, quant_stats = self.quantize(x)
         x = self.generator(quant)
         return x, codebook_loss, quant_stats
+
+
+@ARCH_REGISTRY.register()
+class AutoEncoder(nn.Module):
+    def __init__(self, img_size, nf, ch_mult, quantizer="nearest", res_blocks=2, attn_resolutions=[16], codebook_size=1024, emb_dim=256,
+                beta=0.25, gumbel_straight_through=False, gumbel_kl_weight=1e-8, model_path=None):
+        super().__init__()
+        logger = get_root_logger()
+        self.in_channels = 3 
+        self.nf = nf 
+        self.n_blocks = res_blocks 
+        self.codebook_size = codebook_size
+        self.embed_dim = emb_dim
+        self.ch_mult = ch_mult
+        self.resolution = img_size
+        self.attn_resolutions = attn_resolutions
+        self.quantizer_type = quantizer
+        self.encoder = Encoder(
+            self.in_channels,
+            self.nf,
+            self.embed_dim,
+            self.ch_mult,
+            self.n_blocks,
+            self.resolution,
+            self.attn_resolutions
+        )
+        self.generator = Generator(
+            self.nf, 
+            self.embed_dim,
+            self.ch_mult, 
+            self.n_blocks, 
+            self.resolution, 
+            self.attn_resolutions
+        )
+
+        if model_path is not None:
+            chkpt = torch.load(model_path, map_location='cpu')
+            if 'params_ema' in chkpt:
+                self.load_state_dict(torch.load(model_path, map_location='cpu')['params_ema'])
+                logger.info(f'vqgan is loaded from: {model_path} [params_ema]')
+            elif 'params' in chkpt:
+                self.load_state_dict(torch.load(model_path, map_location='cpu')['params'])
+                logger.info(f'vqgan is loaded from: {model_path} [params]')
+            else:
+                raise ValueError(f'Wrong params!')
+
+    def check_image_size(self, x, padder_size):
+        _, _, h, w = x.size()
+        mod_pad_h = (padder_size - h % padder_size) % padder_size
+        mod_pad_w = (padder_size - w % padder_size) % padder_size
+        x = F.pad(x, (0, mod_pad_w, 0, mod_pad_h))
+        return x
+
+
+    def forward(self, x):
+        _, _, h, w = x.shape
+        x = self.check_image_size(x, 32)
+
+        x = self.encoder(x)
+        x = self.generator(x)
+
+        x = x[:,:,:h,:w]
+        return x
+
+
+@ARCH_REGISTRY.register()
+class AutoEncoderRes(nn.Module):
+    def __init__(self, img_size, nf, ch_mult, quantizer="nearest", res_blocks=2, attn_resolutions=[16], codebook_size=1024, emb_dim=256,
+                beta=0.25, gumbel_straight_through=False, gumbel_kl_weight=1e-8, model_path=None):
+        super().__init__()
+        logger = get_root_logger()
+        self.in_channels = 3 
+        self.nf = nf 
+        self.n_blocks = res_blocks 
+        self.codebook_size = codebook_size
+        self.embed_dim = emb_dim
+        self.ch_mult = ch_mult
+        self.resolution = img_size
+        self.attn_resolutions = attn_resolutions
+        self.quantizer_type = quantizer
+        self.encoder = Encoder(
+            self.in_channels,
+            self.nf,
+            self.embed_dim,
+            self.ch_mult,
+            self.n_blocks,
+            self.resolution,
+            self.attn_resolutions
+        )
+        self.generator = Generator(
+            self.nf, 
+            self.embed_dim,
+            self.ch_mult, 
+            self.n_blocks, 
+            self.resolution, 
+            self.attn_resolutions
+        )
+
+        if model_path is not None:
+            chkpt = torch.load(model_path, map_location='cpu')
+            if 'params_ema' in chkpt:
+                self.load_state_dict(torch.load(model_path, map_location='cpu')['params_ema'])
+                logger.info(f'vqgan is loaded from: {model_path} [params_ema]')
+            elif 'params' in chkpt:
+                self.load_state_dict(torch.load(model_path, map_location='cpu')['params'])
+                logger.info(f'vqgan is loaded from: {model_path} [params]')
+            else:
+                raise ValueError(f'Wrong params!')
+
+    def check_image_size(self, x, padder_size):
+        _, _, h, w = x.size()
+        mod_pad_h = (padder_size - h % padder_size) % padder_size
+        mod_pad_w = (padder_size - w % padder_size) % padder_size
+        x = F.pad(x, (0, mod_pad_w, 0, mod_pad_h))
+        return x
+
+
+    def forward(self, x):
+        _, _, h, w = x.shape
+        inp = self.check_image_size(x, 32)
+
+        x = self.encoder(inp)
+        x = self.generator(x)
+
+        x = x + inp
+
+        return x[:, :, :h, :w]
+
+
+
+@ARCH_REGISTRY.register()
+class DeblurAutoEncoderTwoBranch(nn.Module):
+    def __init__(self, img_size, nf, ch_mult, quantizer="nearest", res_blocks=2, attn_resolutions=[16], codebook_size=1024, emb_dim=256,
+                beta=0.25, gumbel_straight_through=False, gumbel_kl_weight=1e-8, model_path=None):
+        super().__init__()
+        logger = get_root_logger()
+        self.in_channels = 3 
+        self.nf = nf 
+        self.n_blocks = res_blocks 
+        self.codebook_size = codebook_size
+        self.embed_dim = emb_dim
+        self.ch_mult = ch_mult
+        self.resolution = img_size
+        self.attn_resolutions = attn_resolutions
+        self.quantizer_type = quantizer
+        self.encoder = Encoder(
+            self.in_channels,
+            self.nf,
+            self.embed_dim,
+            self.ch_mult,
+            self.n_blocks,
+            self.resolution,
+            self.attn_resolutions
+        )
+        self.generator = Generator(
+            self.nf, 
+            self.embed_dim,
+            self.ch_mult, 
+            self.n_blocks, 
+            self.resolution, 
+            self.attn_resolutions
+        )
+
+        self.kernel_branch = VQAutoEncoder()
+
+
+        if model_path is not None:
+            chkpt = torch.load(model_path, map_location='cpu')
+            if 'params_ema' in chkpt:
+                self.load_state_dict(torch.load(model_path, map_location='cpu')['params_ema'])
+                logger.info(f'vqgan is loaded from: {model_path} [params_ema]')
+            elif 'params' in chkpt:
+                self.load_state_dict(torch.load(model_path, map_location='cpu')['params'])
+                logger.info(f'vqgan is loaded from: {model_path} [params]')
+            else:
+                raise ValueError(f'Wrong params!')
+
+
+
+    def check_image_size(self, x, padder_size):
+        _, _, h, w = x.size()
+        mod_pad_h = (padder_size - h % padder_size) % padder_size
+        mod_pad_w = (padder_size - w % padder_size) % padder_size
+        x = F.pad(x, (0, mod_pad_w, 0, mod_pad_h))
+        return x
+
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.generator(x)
+        return x
+
+
 
 
 

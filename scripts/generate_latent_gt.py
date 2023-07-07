@@ -52,15 +52,17 @@ if __name__ == '__main__':
             img = img.unsqueeze(0).to(device)
             with torch.no_grad():
                 # output = net(img)[0]
-                x, feat_dict = vqgan.encoder(img, True)
+                x = vqgan.encoder(img)
+                print('x feat: ', x.shape)
                 x, _, log = vqgan.quantize(x)
             # del output
             torch.cuda.empty_cache()
 
             min_encoding_indices = log['min_encoding_indices']
-            min_encoding_indices = min_encoding_indices.view(size_latent,size_latent)
+            min_encoding_indices = min_encoding_indices.view(size_latent,size_latent)  # 16 * 16 = 256, 
+            # print(min_encoding_indices)
             latent[i][img_name[:-4]] = min_encoding_indices.cpu().numpy()
-            print(img_name, latent[i][img_name[:-4]].shape)
+            print(img_name[:-4], latent[i][img_name[:-4]].shape)
 
     latent_save_path = os.path.join(save_root, f'latent_gt_code{codebook_size}.pth')
     torch.save(latent, latent_save_path)

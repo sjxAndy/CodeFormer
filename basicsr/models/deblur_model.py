@@ -13,7 +13,7 @@ from .sr_model import SRModel
 
 
 @MODEL_REGISTRY.register()
-class VQGANModel(SRModel):
+class DeblurTwoBranchModel(SRModel):
     def feed_data(self, data):
         self.gt = data['gt'].to(self.device)
         self.lq = data['lq'].to(self.device)
@@ -71,8 +71,6 @@ class VQGANModel(SRModel):
         else:
             self.l_weight_codebook = 1.0
         
-        self.vqgan_quantizer = self.opt['network_g']['quantizer']
-        logger.info(f'vqgan_quantizer: {self.vqgan_quantizer}')
 
         self.net_g_start_iter = train_opt.get('net_g_start_iter', 0)
         self.net_d_iters = train_opt.get('net_d_iters', 1)
@@ -114,23 +112,19 @@ class VQGANModel(SRModel):
         self.optimizer_d = self.get_optimizer(optim_type, self.net_d.parameters(), **train_opt['optim_d'])
         self.optimizers.append(self.optimizer_d)
 
-
-    def optimize_parameters(self, current_iter):
+    def optimize_parameters(self, current_iter, tb_logger):
         logger = get_root_logger()
         loss_dict = OrderedDict()
-        if self.opt['network_g']['quantizer'] == 'gumbel':
-            self.net_g.module.quantize.temperature = max(1/16, ((-1/160000) * current_iter) + 1)
-            if current_iter%1000 == 0:
-                logger.info(f'temperature: {self.net_g.module.quantize.temperature}')
 
         # optimize net_g
         for p in self.net_d.parameters():
             p.requires_grad = False
 
         self.optimizer_g.zero_grad()
-        self.output, l_codebook, quant_stats = self.net_g(self.lq)
+        result = self.net_g(self.lq, 1.0)
 
-        l_codebook = l_codebook*self.l_weight_codebook
+        self.output = result['main_dec']
+
 
         l_g_total = 0
         # every net_d_iters loop in
@@ -152,13 +146,15 @@ class VQGANModel(SRModel):
                 fake_g_pred = self.net_d(self.output)
                 l_g_gan = self.cri_gan(fake_g_pred, True, is_disc=False)
                 recon_loss = l_g_total
-                last_layer = self.net_g.module.generator.blocks[-1].weight
+                last_layer = self.net_g.module.get_last_layer()
                 d_weight = self.calculate_adaptive_weight(recon_loss, l_g_gan, last_layer, disc_weight_max=1.0)
                 d_weight *= self.adopt_weight(1, current_iter, self.net_d_start_iter)
                 d_weight *= self.disc_weight # tamming setting 0.8
                 l_g_total += d_weight * l_g_gan
                 loss_dict['l_g_gan'] = d_weight * l_g_gan
 
+            # codebook loss
+            l_codebook = result['codebook_loss']
             l_g_total += l_codebook
             loss_dict['l_codebook'] = l_codebook
 
@@ -191,17 +187,36 @@ class VQGANModel(SRModel):
             self.model_ema(decay=self.ema_decay)
 
 
+        if tb_logger is not None and current_iter % self.opt['logger']['add_image_freq'] == 0:
+            srcs = tensor2img(self.lq)
+            preds = tensor2img(self.output)
+            gts = tensor2img(self.gt)
+
+            tb_logger.add_image('input', srcs, global_step = current_iter, dataformats = 'HWC')
+            tb_logger.add_image('gt', gts, global_step = current_iter, dataformats = 'HWC')
+            tb_logger.add_image('pred', preds, global_step = current_iter, dataformats = 'HWC')
+
+
+
     def test(self):
+        self.net_g.eval()
         with torch.no_grad():
-            if hasattr(self, 'net_g_ema'):
-                self.net_g_ema.eval()
-                self.output, _, _ = self.net_g_ema(self.gt)
-            else:
-                logger = get_root_logger()
-                logger.warning('Do not have self.net_g_ema, use self.net_g.')
-                self.net_g.eval()
-                self.output, _, _ = self.net_g(self.gt)
-                self.net_g.train()
+            n = len(self.lq)
+            outs = []
+            m = self.opt['val'].get('max_minibatch', n)
+            i = 0
+            while i < n:
+                j = i + m
+                if j >= n:
+                    j = n
+                pred = self.net_g(self.lq[i:j], 1.0)['main_dec']
+                if isinstance(pred, list):
+                    pred = pred[-1]
+                outs.append(pred.detach().cpu())
+                i = j
+
+            self.output = torch.cat(outs, dim=0)
+        self.net_g.train()
 
 
     def dist_validation(self, dataloader, current_iter, tb_logger, save_img):
@@ -223,6 +238,7 @@ class VQGANModel(SRModel):
 
             visuals = self.get_current_visuals()
             sr_img = tensor2img([visuals['result']])
+            lq_img = tensor2img([self.lq])
             if 'gt' in visuals:
                 gt_img = tensor2img([visuals['gt']])
                 del self.gt
@@ -237,13 +253,18 @@ class VQGANModel(SRModel):
                     save_img_path = osp.join(self.opt['path']['visualization'], img_name,
                                              f'{img_name}_{current_iter}.png')
                 else:
+
                     if self.opt['val']['suffix']:
                         save_img_path = osp.join(self.opt['path']['visualization'], dataset_name,
                                                  f'{img_name}_{self.opt["val"]["suffix"]}.png')
+                        save_lq_path = osp.join(self.opt['path']['visualization'], dataset_name,
+                                                 f'{img_name}_{self.opt["val"]["suffix"]}_in.png')              
                     else:
                         save_img_path = osp.join(self.opt['path']['visualization'], dataset_name,
                                                  f'{img_name}_{self.opt["name"]}.png')
                 imwrite(sr_img, save_img_path)
+                imwrite(lq_img, save_lq_path)
+
 
             if with_metrics:
                 # calculate metrics

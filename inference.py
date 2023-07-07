@@ -6,11 +6,15 @@ import os
 import torch
 import yaml
 
-from basicsr.archs.vqgan_arch import VQAutoEncoder
+from basicsr.archs.vqgan_arch import VQAutoEncoder, AutoEncoder, DeblurVQAutoEncoder
+from basicsr.archs.deblur_arch import DeblurTwoBranch
+
 from torchvision.transforms.functional import normalize
 from basicsr.utils import img2tensor, tensor2img
 from basicsr.data.ffhq_blind_dataset import FFHQBlindDataset
 from torch.utils.data import Dataset, DataLoader
+from basicsr.archs import build_network
+
 
 
 def to_tensor(img, is_train = False):
@@ -79,8 +83,6 @@ def read_single_img():
 
     return img_in
 
-
-
 def read_single_img2():
     # read img from
     # img = cv2.imread('/mnt/lustre/share/disp_data/ffhq/FFHQ/ffhq/images/00001.png')
@@ -104,8 +106,22 @@ def read_single_img2():
 
     return img_in
 
+def read_deblur_img():
+    img = cv2.imread('/mnt/lustre/leifei1/data/deblur/train/train/blur_crops/GOPR0372_07_00-000058_s001.png').astype(np.float32) / 255.0
+
+    # img = cv2.imread('tmp/in0.png').astype(np.float32) / 255.0
+
+    img = cv2.resize(img, (1280, 720))
+
+    # img = img[:512, :25, :]
+
+    # cv2.imwrite("tmp/in.png", img * 255)
+
+    img = img2tensor(img, bgr2rgb=True, float32=True)
+    img = img.unsqueeze(0)
 
 
+    return img
 
 def read_from_dataloader():
     with open('options/VQGAN_512_ds32_nearest_stage1.yml', 'r') as f:
@@ -132,7 +148,6 @@ def read_from_dataloader():
     cv2.imwrite('tmp/gt.png', gt_data)
 
     return gt
-
 
 def test_vqgan():
 
@@ -171,16 +186,105 @@ def test_vqgan():
 
     cv2.imwrite('tmp/out.png', out * 255)    
 
+def test_vqgan_deblur():
+    with open('options/Deblur_VQGAN.yml', 'r') as f:
+        cfg = yaml.safe_load(f)
 
-def test_codeformer():
-    pass
+    model_path = 'experiments/20230609_105240_Deblur-VQGAN-512/models/net_g_520000.pth'
+    # model_path = 'experiments/20230607_221807_Deblur-VQGAN-512-ds32-nearest-stage1/models/net_g_760000.pth'
+
+    # load model
+    cfg_vqgan = cfg['network_g']
+    model_type = cfg_vqgan.pop('type')
+    model = DeblurVQAutoEncoder(**cfg_vqgan)
+    # model = VQAutoEncoder(**cfg_vqgan)
+
+
+    checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage)
+    # for k, v in checkpoint['params_ema'].items():
+    #     print(k)
+
+    model.load_state_dict(checkpoint['params_ema'])
+    model.eval()
+
+
+    img_in = read_deblur_img()
+
+    # inference
+    print('input raw info: ', img_in.shape, img_in.mean())
+    out, codebook_loss, quant_stats = model(img_in)
+    print('out raw info: ', out.shape, out.mean())
+    img_out = tensor2img(out, rgb2bgr=True, out_type = np.float32)
+    print('out info: ', img_out.shape, img_out.mean())
+
+    cv2.imwrite('tmp/out_DeblurVQAutoEncoder_potrait.png', img_out * 255)
+
+def test_ae_deblur():
+    with open('options/Deblur_AE.yml', 'r') as f:
+        cfg = yaml.safe_load(f)
+
+    model_path = 'experiments/20230608_195210_AE-512-ds32-nearest-stage1/models/net_g_90000.pth'
+
+    # load model
+    cfg_vqgan = cfg['network_g']
+    model_type = cfg_vqgan.pop('type')
+    model = AutoEncoder(**cfg_vqgan)
+
+    checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage)
+    # for k, v in checkpoint['params_ema'].items():
+    #     print(k)
+
+    model.load_state_dict(checkpoint['params_ema'])
+    model.eval()
+    img_in = read_deblur_img()
+
+    # inference
+    print('in info： ', img_in.shape, img_in.mean())
+    out = model(img_in)
+    print('out raw info: ', out.shape, out.mean())
+
+    img_out = tensor2img(out, rgb2bgr=True, out_type = np.float32)
+    print('out info: ', img_out.shape, img_out.mean())
+
+    cv2.imwrite('tmp/out_potrait.png', img_out * 255)
+
+
+def test_DeblurTwoBranch():
+    with open('options/train_DeblurTwoBranch.yml') as f:
+        opt = yaml.safe_load(f)
+
+
+    model_path = 'experiments/20230613_205403_train_deblurTB/models/net_g_165000.pth'
+
+    cfg = opt['network_g']
+    model_type = cfg.pop('type')
+    model = DeblurTwoBranch(**cfg)
+
+    checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage)
+
+    model.load_state_dict(checkpoint['params_ema'])
+    model.eval()
+    img_in = read_deblur_img()
+
+    print('input shape: ', img_in.shape)
+    out = model(img_in, 1.0)
+
+
+    img_out = out['main_dec']
+    print('out shape: ', img_out.shape, img_out.mean())
+
+    img_out = tensor2img(img_out, rgb2bgr=True, out_type = np.float32)
+
+    cv2.imwrite('tmp/out_twoBranch.png', img_out * 255)
 
 
 
 if __name__ == '__main__':
-    test_vqgan()
+    # test_vqgan()
     # read_from_dataloader()
-
+    test_ae_deblur()
+    # test_vqgan_deblur()
+    # test_DeblurTwoBranch()
 
 
 

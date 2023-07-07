@@ -13,7 +13,7 @@ from .sr_model import SRModel
 
 
 @MODEL_REGISTRY.register()
-class VQGANModel(SRModel):
+class AEModel(SRModel):
     def feed_data(self, data):
         self.gt = data['gt'].to(self.device)
         self.lq = data['lq'].to(self.device)
@@ -128,9 +128,7 @@ class VQGANModel(SRModel):
             p.requires_grad = False
 
         self.optimizer_g.zero_grad()
-        self.output, l_codebook, quant_stats = self.net_g(self.lq)
-
-        l_codebook = l_codebook*self.l_weight_codebook
+        self.output = self.net_g(self.lq)
 
         l_g_total = 0
         # every net_d_iters loop in
@@ -159,8 +157,6 @@ class VQGANModel(SRModel):
                 l_g_total += d_weight * l_g_gan
                 loss_dict['l_g_gan'] = d_weight * l_g_gan
 
-            l_g_total += l_codebook
-            loss_dict['l_codebook'] = l_codebook
 
             l_g_total.backward()
             self.optimizer_g.step()
@@ -192,16 +188,27 @@ class VQGANModel(SRModel):
 
 
     def test(self):
+        self.net_g.eval()
         with torch.no_grad():
-            if hasattr(self, 'net_g_ema'):
-                self.net_g_ema.eval()
-                self.output, _, _ = self.net_g_ema(self.gt)
-            else:
-                logger = get_root_logger()
-                logger.warning('Do not have self.net_g_ema, use self.net_g.')
-                self.net_g.eval()
-                self.output, _, _ = self.net_g(self.gt)
-                self.net_g.train()
+            n = len(self.lq)
+            outs = []
+            m = self.opt['val'].get('max_minibatch', n)
+            i = 0
+            while i < n:
+                j = i + m
+                if j >= n:
+                    j = n
+                pred = self.net_g(self.lq[i:j])
+                if isinstance(pred, list):
+                    pred = pred[-1]
+                outs.append(pred.detach().cpu())
+                i = j
+
+            self.output = torch.cat(outs, dim=0)
+
+
+
+        self.net_g.train()
 
 
     def dist_validation(self, dataloader, current_iter, tb_logger, save_img):
@@ -223,6 +230,7 @@ class VQGANModel(SRModel):
 
             visuals = self.get_current_visuals()
             sr_img = tensor2img([visuals['result']])
+            lq_img = tensor2img([self.lq])
             if 'gt' in visuals:
                 gt_img = tensor2img([visuals['gt']])
                 del self.gt
@@ -237,13 +245,18 @@ class VQGANModel(SRModel):
                     save_img_path = osp.join(self.opt['path']['visualization'], img_name,
                                              f'{img_name}_{current_iter}.png')
                 else:
+
                     if self.opt['val']['suffix']:
                         save_img_path = osp.join(self.opt['path']['visualization'], dataset_name,
                                                  f'{img_name}_{self.opt["val"]["suffix"]}.png')
+                        save_lq_path = osp.join(self.opt['path']['visualization'], dataset_name,
+                                                 f'{img_name}_{self.opt["val"]["suffix"]}_in.png')              
                     else:
                         save_img_path = osp.join(self.opt['path']['visualization'], dataset_name,
                                                  f'{img_name}_{self.opt["name"]}.png')
                 imwrite(sr_img, save_img_path)
+                imwrite(lq_img, save_lq_path)
+
 
             if with_metrics:
                 # calculate metrics

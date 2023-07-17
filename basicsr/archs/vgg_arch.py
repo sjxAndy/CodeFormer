@@ -3,10 +3,12 @@ import torch
 from collections import OrderedDict
 from torch import nn as nn
 from torchvision.models import vgg as vgg
+import os.path as osp
 
-from basicsr.utils.registry import ARCH_REGISTRY
 
-VGG_PRETRAIN_PATH = 'experiments/pretrained_models/vgg19-dcbb9e9d.pth'
+
+_pretrain_model = '/mnt/lustre/leifei1/project/NAFNet/basicsr/models/losses/vgg19-dcbb9e9d.pth'
+VGG_PRETRAIN_PATH = _pretrain_model
 NAMES = {
     'vgg11': [
         'conv1_1', 'relu1_1', 'pool1', 'conv2_1', 'relu2_1', 'pool2', 'conv3_1', 'relu3_1', 'conv3_2', 'relu3_2',
@@ -51,7 +53,6 @@ def insert_bn(names):
     return names_bn
 
 
-@ARCH_REGISTRY.register()
 class VGGFeatureExtractor(nn.Module):
     """VGG network for feature extraction.
 
@@ -101,10 +102,12 @@ class VGGFeatureExtractor(nn.Module):
                 max_idx = idx
 
         if os.path.exists(VGG_PRETRAIN_PATH):
+            print(f'load vgg pth from {VGG_PRETRAIN_PATH}')
             vgg_net = getattr(vgg, vgg_type)(pretrained=False)
             state_dict = torch.load(VGG_PRETRAIN_PATH, map_location=lambda storage, loc: storage)
             vgg_net.load_state_dict(state_dict)
         else:
+            print(f'load vgg pth from ZOO')
             vgg_net = getattr(vgg, vgg_type)(pretrained=True)
 
         features = vgg_net.features[:max_idx + 1]
@@ -151,8 +154,8 @@ class VGGFeatureExtractor(nn.Module):
             x = (x + 1) / 2
         if self.use_input_norm:
             x = (x - self.mean) / self.std
-        output = {}
 
+        output = {}
         for key, layer in self.vgg_net._modules.items():
             x = layer(x)
             if key in self.layer_name_list:

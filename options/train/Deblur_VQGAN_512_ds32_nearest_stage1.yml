@@ -1,49 +1,45 @@
 # general settings
-name: VQGAN-512-ds32-nearest-stage1
+name: Deblur-VQGAN-512-ds32-nearest-stage1
 model_type: VQGANModel
 num_gpu: 8
 manual_seed: 0
+scale: 1
 
 # dataset and data loader settings
 datasets:
   train:
-    name: FFHQ
-    type: FFHQBlindDataset
-    dataroot_gt: datasets/ffhq/ffhq_512
+    name: gopro-train
+    type: PairedImageDataset
+    dataroot_gt: /mnt/lustre/leifei1/data/deblur/train/train/sharp_crops.lmdb
+    dataroot_lq: /mnt/lustre/leifei1/data/deblur/train/train/blur_crops.lmdb
+
     filename_tmpl: '{}'
     io_backend:
-      type: disk
+      type: lmdb
 
-    in_size: 512
-    gt_size: 512
-    mean: [0.5, 0.5, 0.5]
-    std: [0.5, 0.5, 0.5]
-    use_hflip: true
-    use_corrupt: false # for VQGAN
+    gt_size: 256
+    use_flip: true
+    use_rot: true
 
     # data loader
-    num_worker_per_gpu: 2
+    use_shuffle: true
+    num_worker_per_gpu: 4
     batch_size_per_gpu: 4
     dataset_enlarge_ratio: 100
+    prefetch_mode: ~
 
-    prefetch_mode: cpu
-    num_prefetch_queue: 4
-
-  # val:
-  #   name: CelebA-HQ-512
-  #   type: PairedImageDataset
-  #   dataroot_lq: datasets/faces/validation/gt
-  #   dataroot_gt: datasets/faces/validation/gt
-  #   io_backend:
-  #     type: disk
-  #   mean: [0.5, 0.5, 0.5]
-  #   std: [0.5, 0.5, 0.5]
-  #   scale: 1
+  val:
+    name: gopro-test
+    type: PairedImageDataset
+    dataroot_gt: /mnt/lustre/leifei1/data/deblur/test/target.lmdb
+    dataroot_lq: /mnt/lustre/leifei1/data/deblur/test/input.lmdb
+    io_backend:
+      type: lmdb
     
 # network structures
 network_g:
   type: VQAutoEncoder
-  img_size: 512
+  img_size: 256
   nf: 64
   ch_mult: [1, 2, 2, 4, 4, 8]
   quantizer: 'nearest'

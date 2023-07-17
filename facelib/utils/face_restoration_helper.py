@@ -339,8 +339,12 @@ class FaceRestoreHelper(object):
                 input_img = self.pad_input_imgs[idx]
             else:
                 input_img = self.input_img
+            
+            cv2.imwrite("results/tmp/cropped_face_input.png", input_img)
             cropped_face = cv2.warpAffine(
-                input_img, affine_matrix, self.face_size, borderMode=border_mode, borderValue=(135, 133, 132))  # gray
+                input_img, affine_matrix, self.face_size, borderMode=border_mode, borderValue=(135, 133, 132))  # grayß
+            print('cropped_face shape: ', cropped_face.shape)
+            cv2.imwrite("results/tmp/cropped_face_warp.png", cropped_face)
             self.cropped_faces.append(cropped_face)
             # save the cropped face
             if save_cropped_path is not None:
@@ -376,6 +380,7 @@ class FaceRestoreHelper(object):
         if upsample_img is None:
             # simply resize the background
             # upsample_img = cv2.resize(self.input_img, (w_up, h_up), interpolation=cv2.INTER_LANCZOS4)
+            print('simplely resize input img')
             upsample_img = cv2.resize(self.input_img, (w_up, h_up), interpolation=cv2.INTER_LINEAR)
         else:
             upsample_img = cv2.resize(upsample_img, (w_up, h_up), interpolation=cv2.INTER_LANCZOS4)
@@ -398,7 +403,11 @@ class FaceRestoreHelper(object):
                     extra_offset = 0
                 inverse_affine[:, 2] += extra_offset
                 face_size = self.face_size
+            print('restored face shape: ', restored_face.shape)
             inv_restored = cv2.warpAffine(restored_face, inverse_affine, (w_up, h_up))
+            print('inv_restored shape: ', inv_restored.shape)
+            cv2.imwrite("results/tmp/inv_restored.png", inv_restored)
+            cv2.imwrite("results/tmp/restored_face.png", restored_face)
 
             # if draw_box or not self.use_parse:  # use square parse maps
             #     mask = np.ones(face_size, dtype=np.float32)
@@ -452,6 +461,7 @@ class FaceRestoreHelper(object):
             if len(upsample_img.shape) == 2:  # upsample_img is gray image
                 upsample_img = upsample_img[:, :, None]
             inv_soft_mask = inv_soft_mask[:, :, None]
+            cv2.imwrite("results/tmp/inv_soft_mask0.png", inv_soft_mask*255)
 
             # parse mask
             if self.use_parse:
@@ -485,6 +495,7 @@ class FaceRestoreHelper(object):
                 # pasted_face = inv_restored
                 fuse_mask = (inv_soft_parse_mask<inv_soft_mask).astype('int')
                 inv_soft_mask = inv_soft_parse_mask*fuse_mask + inv_soft_mask*(1-fuse_mask)
+                cv2.imwrite("results/tmp/inv_soft_mask_1.png", inv_soft_mask*255)
 
             if len(upsample_img.shape) == 3 and upsample_img.shape[2] == 4:  # alpha channel
                 alpha = upsample_img[:, :, 3:]
@@ -499,7 +510,7 @@ class FaceRestoreHelper(object):
             upsample_img = upsample_img.astype(np.uint8)
 
         # draw bounding box
-        if draw_box:
+        if True:
             # upsample_input_img = cv2.resize(input_img, (w_up, h_up))
             img_color = np.ones([*upsample_img.shape], dtype=np.float32)
             img_color[:,:,0] = 0

@@ -150,25 +150,31 @@ class CodeFormerJointModel(SRModel):
             min_encoding_indices = quant_stats['min_encoding_indices']
             self.idx_gt = min_encoding_indices.view(self.b, -1)
 
-        if current_iter <= 40000: # small degradation
+        if current_iter <= 40000 * 3: # small degradation
             small_per_n = 1
             w = 1
-        elif current_iter <= 80000: # small degradation
+        elif current_iter <= 80000 * 3: # small degradation
             small_per_n = 1
             w = 1.3            
-        elif current_iter <= 120000: # large degradation
-            small_per_n = 120000
+        elif current_iter <= 120000 * 3: # large degradation
+            small_per_n = 120000 * 3 + 1
             w = 0     
         else: # mixed degradation
             small_per_n = 15
             w = 1.3
-
         if current_iter % small_per_n == 0:
             self.output, logits, lq_feat = self.net_g(self.input, w=w, detach_16=True)
             large_de = False
         else:
             logits, lq_feat = self.net_g(self.input_large_de, code_only=True)
             large_de = True
+
+        # if current_iter % small_per_n == 0:
+        #     self.output, logits, lq_feat = self.net_g(self.input, w=w, detach_16=True)
+        #     large_de = False
+        # else:
+        #     logits, lq_feat = self.net_g(self.input_large_de, code_only=True)
+        #     large_de = True
 
         if self.hq_feat_loss:
             # quant_feats

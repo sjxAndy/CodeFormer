@@ -8,8 +8,10 @@ manual_seed: 0
 datasets:
   train:
     name: FFHQ
-    type: FFHQBlindJointDataset
+    # type: FFHQBlindJointDataset
+    type: FFHQBlurJointDataset
     dataroot_gt: datasets/ffhq/ffhq_512
+    sdk_gt: s3://ffhq/images
     filename_tmpl: '{}'
     io_backend:
       type: disk
@@ -19,7 +21,10 @@ datasets:
     mean: [0.5, 0.5, 0.5]
     std: [0.5, 0.5, 0.5]
     use_hflip: true
-    use_corrupt: true
+    use_corrupt: false
+    use_blur_input: true
+    sdk_blur: s3://ffhq/images_deblur_student6_g_350000
+    use_distortion: false
 
     blur_kernel_size: 41
     use_motion_kernel: false
@@ -37,12 +42,12 @@ datasets:
     noise_range_large: [0, 20]
     jpeg_range_large: [30, 80]
 
-    latent_gt_path: ~ # without pre-calculated latent code
-    # latent_gt_path: './experiments/pretrained_models/VQGAN/latent_gt_code1024.pth'
+    # latent_gt_path: ~ # without pre-calculated latent code
+    latent_gt_path: './experiments/pretrained_models/vqgan/latent_gt_code1024.pth'
 
     # data loader
-    num_worker_per_gpu: 1
-    batch_size_per_gpu: 3
+    num_worker_per_gpu: 1 # 1
+    batch_size_per_gpu: 1 # 3
     dataset_enlarge_ratio: 100
     prefetch_mode: ~
 
@@ -74,6 +79,7 @@ network_vqgan: # this config is needed if no pre-calculated latent
   ch_mult: [1, 2, 2, 4, 4, 8]
   quantizer: 'nearest'
   codebook_size: 1024
+  model_path: './experiments/pretrained_models/vqgan/vqgan_code1024.pth'
 
 network_d:
   type: VQGANDiscriminator
@@ -83,10 +89,10 @@ network_d:
 
 # path
 path:
-  pretrain_network_g: './experiments/pretrained_models/CodeFormer_stage2/net_g_latest.pth' # pretrained G model in StageII 
+  pretrain_network_g: './experiments/20230525_175526_CodeFormer_stage2/models/net_g_latest.pth' # pretrained G model in StageII 
   param_key_g: params_ema
   strict_load_g: true
-  pretrain_network_d: './experiments/pretrained_models/CodeFormer_stage2/net_d_latest.pth' # pretrained D model in StageII
+  pretrain_network_d: './experiments/pretrained_models/vqgan/vqgan_discriminator.pth' # pretrained D model in StageII
   resume_state: ~
 
 # base_lr(4.5e-6)*bach_size(4)

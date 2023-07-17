@@ -136,8 +136,9 @@ if __name__ == '__main__':
                                             connect_list=['32', '64', '128', '256']).to(device)
     
     # ckpt_path = 'weights/CodeFormer/codeformer.pth'
-    ckpt_path = load_file_from_url(url=pretrain_model_url['restoration'], 
-                                    model_dir='weights/CodeFormer', progress=True, file_name=None)
+    # ckpt_path = load_file_from_url(url=pretrain_model_url['restoration'], 
+    #                                 model_dir='weights/CodeFormer', progress=True, file_name=None)
+    ckpt_path = '/mnt/lustre/sunjixiang1/code/CodeFormer/experiments/20230529_181513_CodeFormer_stage3/models/net_g_latest.pth'
     checkpoint = torch.load(ckpt_path)['params_ema']
     net.load_state_dict(checkpoint)
     net.eval()
@@ -223,6 +224,7 @@ if __name__ == '__main__':
                 bg_img = None
             face_helper.get_inverse_affine(None)
             # paste each restored face to the input image
+            print('face_upsampler:', args.face_upsample, face_upsampler)
             if args.face_upsample and face_upsampler is not None: 
                 restored_img = face_helper.paste_faces_to_input_image(upsample_img=bg_img, draw_box=args.draw_box, face_upsampler=face_upsampler)
             else:

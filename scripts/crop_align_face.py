@@ -29,9 +29,9 @@ except ImportError:
     print('Please install dlib by running:' 'conda install -c conda-forge dlib')
 
 # download model from: http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2
-shape_predictor_url = 'https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/shape_predictor_68_face_landmarks-fbdc2cb8.dat'
-ckpt_path = load_file_from_url(url=shape_predictor_url, 
-                                    model_dir='weights/dlib', progress=True, file_name=None)
+# shape_predictor_url = 'https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/shape_predictor_68_face_landmarks-fbdc2cb8.dat'
+# ckpt_path = load_file_from_url(url=shape_predictor_url, 
+#                                     model_dir='weights/dlib', progress=True, file_name=None)
 predictor = dlib.shape_predictor('weights/dlib/shape_predictor_68_face_landmarks-fbdc2cb8.dat')
 
 

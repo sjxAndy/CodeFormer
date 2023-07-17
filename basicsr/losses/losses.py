@@ -29,6 +29,10 @@ def charbonnier_loss(pred, target, eps=1e-12):
     return torch.sqrt((pred - target)**2 + eps)
 
 
+def cosine_loss(pred, target, y, reduction='mean'):
+    return F.cosine_embedding_loss(pred, target, y, reduction=reduction)
+
+
 @LOSS_REGISTRY.register()
 class L1Loss(nn.Module):
     """L1 (mean absolute error, MAE) loss.
@@ -415,6 +419,20 @@ class GANLoss(nn.Module):
 
         # loss_weight is always 1.0 for discriminators
         return loss if is_disc else loss * self.loss_weight
+    
+
+@LOSS_REGISTRY.register()
+class IdentityLoss(nn.Module):
+    def __init__(self, loss_weight=1.0, reduction='mean'):
+        super(IdentityLoss, self).__init__()
+        if reduction not in ['none', 'mean', 'sum']:
+            raise ValueError(f'Unsupported reduction mode: {reduction}. ' f'Supported ones are: {_reduction_modes}')
+        self.loss_weight = loss_weight
+        self.reduction = reduction
+        # self.y = torch.tensor(1)
+
+    def forward(self, pred, target, weight=None, **kwargs):
+        return self.loss_weight * cosine_loss(pred, target, torch.ones_like(pred), reduction=self.reduction)
 
 
 def r1_penalty(real_pred, real_img):

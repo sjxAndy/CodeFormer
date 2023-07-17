@@ -9,11 +9,13 @@ import torch
 import torch.utils.data as data
 from torchvision.transforms.functional import (adjust_brightness, adjust_contrast, 
                                         adjust_hue, adjust_saturation, normalize)
+from petrel_client.client import Client
 from basicsr.data import gaussian_kernels as gaussian_kernels
 from basicsr.data.transforms import augment
 from basicsr.data.data_util import paths_from_folder, brush_stroke_mask, random_ff_mask
 from basicsr.utils import FileClient, get_root_logger, imfrombytes, img2tensor
 from basicsr.utils.registry import DATASET_REGISTRY
+from .distortion.general_distortion import GeneralDistortion
 
 @DATASET_REGISTRY.register()
 class FFHQBlindDataset(data.Dataset):
@@ -27,6 +29,8 @@ class FFHQBlindDataset(data.Dataset):
         self.io_backend_opt = opt['io_backend']
 
         self.gt_folder = opt['dataroot_gt']
+        # sdk root folder
+        self.sdk_folder = opt['sdk_gt']
         self.gt_size = opt.get('gt_size', 512)
         self.in_size = opt.get('in_size', 512)
         assert self.gt_size >= self.in_size, 'Wrong setting.'
@@ -52,6 +56,11 @@ class FFHQBlindDataset(data.Dataset):
         else:
             self.load_latent_gt = False  
 
+        # custom blur input
+        self.use_blur_input = opt.get('use_blur_input', False)
+        if self.use_blur_input:
+            self.blur_folder = opt['sdk_blur']
+
         if self.io_backend_opt['type'] == 'lmdb':
             self.io_backend_opt['db_paths'] = self.gt_folder
             if not self.gt_folder.endswith('.lmdb'):
@@ -59,7 +68,23 @@ class FFHQBlindDataset(data.Dataset):
             with open(osp.join(self.gt_folder, 'meta_info.txt')) as fin:
                 self.paths = [line.split('.')[0] for line in fin]
         else:
-            self.paths = paths_from_folder(self.gt_folder)
+            # self.paths = paths_from_folder(self.gt_folder)
+            # sdk path type
+            if self.file_client is None:
+                conf_path = '~/petreloss.conf'
+                self.file_client = Client(conf_path)
+            self.paths = []
+            contents = self.file_client.list(self.sdk_folder)
+            for content in contents:
+                if content.endswith('.jpg') or content.endswith('.png'):
+                    self.paths.append(osp.join(self.sdk_folder, content))
+                else:
+                    continue
+            
+            if self.use_blur_input:
+                self.blur_paths = []
+                for gt_path in self.paths:
+                    self.blur_paths.append(osp.join(self.blur_folder, osp.basename(gt_path)[3:8] + '_deblur.jpg'))
 
         # inpainting mask
         self.gen_inpaint_mask = opt.get('gen_inpaint_mask', False)
@@ -75,6 +100,11 @@ class FFHQBlindDataset(data.Dataset):
             # logger.info(f'mask_max_width: {self.mask_max_width}')
             # logger.info(f'mask_draw_times: {self.mask_draw_times}')
 
+        # custom distortion
+        self.use_distortion = opt.get('use_distortion', False)
+        
+        if self.use_distortion:
+            self.distortion = self.create_distortion(opt.get('Distortion', None))
         # perform corrupt
         self.use_corrupt = opt.get('use_corrupt', True)
         self.use_motion_kernel = False
@@ -175,16 +205,34 @@ class FFHQBlindDataset(data.Dataset):
             locations_in[part] = loc_in
         return locations_gt, locations_in
 
+    def create_distortion(self, Distortion):
+        if Distortion is None:
+            return None
+        return GeneralDistortion(Distortion.get('args'))
 
     def __getitem__(self, index):
-        if self.file_client is None:
-            self.file_client = FileClient(self.io_backend_opt.pop('type'), **self.io_backend_opt)
+        # if self.file_client is None:
+        #     self.file_client = FileClient(self.io_backend_opt.pop('type'), **self.io_backend_opt)
 
+        # sdk file client
+        if self.file_client is None:
+            conf_path = '~/petreloss.conf'
+            self.file_client = Client(conf_path)
         # load gt image
         gt_path = self.paths[index]
         name = osp.basename(gt_path)[:-4]
         img_bytes = self.file_client.get(gt_path)
         img_gt = imfrombytes(img_bytes, float32=True)
+        img_gt = cv2.resize(img_gt, (self.gt_size, self.gt_size), interpolation=cv2.INTER_LINEAR)
+
+        if self.use_blur_input:
+            assert self.blur_paths
+            blur_path = self.blur_paths[index]
+            img_bytes = self.file_client.get(blur_path)
+            img_in = imfrombytes(img_bytes, float32=True)
+            img_in = cv2.resize(img_in, (self.in_size, self.in_size), interpolation=cv2.INTER_LINEAR)
+
+        
         
         # random horizontal flip
         img_gt, status = augment(img_gt, hflip=self.opt['use_hflip'], rotation=False, return_status=True)
@@ -199,8 +247,20 @@ class FFHQBlindDataset(data.Dataset):
             locations_gt, locations_in = self.get_component_locations(name, status)
 
         # generate in image
-        img_in = img_gt
-        if self.use_corrupt and not self.gen_inpaint_mask:
+
+        if self.use_blur_input:
+            pass
+        else:
+            img_in = img_gt
+        if self.use_distortion and not self.gen_inpaint_mask:
+            img_in = (img_in*255).astype('uint8')
+            img_in = self.distortion(img_in)
+            img_in = np.float32(np.array(img_in) / 255.)
+            
+            # resize to in_size
+            img_in = cv2.resize(img_in, (self.in_size, self.in_size), interpolation=cv2.INTER_LINEAR)
+
+        elif self.use_corrupt and not self.gen_inpaint_mask:
             # motion blur
             if self.use_motion_kernel and random.random() < self.motion_kernel_prob:
                 m_i = random.randint(0,31)

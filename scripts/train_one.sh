@@ -1,0 +1,2 @@
+srun -p Pixel --mpi=pmi2 --job-name=train1 --gres=gpu:8 --ntasks=8 --ntasks-per-node=8 --cpus-per-task=6 --kill-on-bad-exit=1 \
+python -u basicsr/train.py -opt options/VQGAN_512_ds32_nearest_stage1.yml --launcher="slurm"

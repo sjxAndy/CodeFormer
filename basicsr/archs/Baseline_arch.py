@@ -191,6 +191,7 @@ if __name__ == '__main__':
 
     net = Baseline(img_channel=img_channel, width=width, middle_blk_num=middle_blk_num,
                  enc_blk_nums=enc_blks, dec_blk_nums=dec_blks, dw_expand=dw_expand, ffn_expand=ffn_expand)
+    print(net)
 
     inp_shape = (3, 256, 256)
 

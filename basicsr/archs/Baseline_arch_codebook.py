@@ -163,7 +163,7 @@ class Baseline(nn.Module):
         return x
 
 @ARCH_REGISTRY.register()
-class BaselineLocal(Local_Base, Baseline):
+class BaselineLocalCodebook(Local_Base, Baseline):
     def __init__(self, *args, train_size=(1, 3, 256, 256), fast_imp=False, **kwargs):
         Local_Base.__init__(self)
         Baseline.__init__(self, *args, **kwargs)

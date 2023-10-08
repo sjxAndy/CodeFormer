@@ -31,8 +31,8 @@ datasets:
     # data loader
     use_shuffle: true
     num_worker_per_gpu: 8
-    batch_size_per_gpu: 4
-    dataset_enlarge_ratio: 1
+    batch_size_per_gpu: 8
+    dataset_enlarge_ratio: 100
     prefetch_mode: ~
 
   val:
@@ -58,10 +58,10 @@ network_g:
 
 # path
 path:
-  pretrain_network_g: ~
-  strict_load_g: true
+  pretrain_network_g: /mnt/lustre/sunjixiang1/ckpts/nafnet_baseline_Gopro_400000.pth
+  strict_load_g: false
   # resume_state: experiments/20230705_170926_Baseline-GoPro-width64/training_states/15000.state
-  resume_state: ~
+  resume_state: /mnt/lustre/sunjixiang1/code/CodeFormer/experiments/20230725_110537_Baseline-GoPro-width64/training_states/25000.state
 
 
 # training settings

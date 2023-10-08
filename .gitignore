@@ -132,6 +132,5 @@ run.sh
 
 
 datasets/*
-vqfr/*
 tmp/
 results/

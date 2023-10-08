@@ -15,7 +15,6 @@ from basicsr.data.transforms import augment
 from basicsr.data.data_util import paths_from_folder, brush_stroke_mask, random_ff_mask
 from basicsr.utils import FileClient, get_root_logger, imfrombytes, img2tensor
 from basicsr.utils.registry import DATASET_REGISTRY
-from .distortion.general_distortion import GeneralDistortion
 
 @DATASET_REGISTRY.register()
 class FFHQBlindDataset(data.Dataset):
@@ -101,10 +100,6 @@ class FFHQBlindDataset(data.Dataset):
             # logger.info(f'mask_draw_times: {self.mask_draw_times}')
 
         # custom distortion
-        self.use_distortion = opt.get('use_distortion', False)
-        
-        if self.use_distortion:
-            self.distortion = self.create_distortion(opt.get('Distortion', None))
         # perform corrupt
         self.use_corrupt = opt.get('use_corrupt', True)
         self.use_motion_kernel = False
@@ -205,11 +200,6 @@ class FFHQBlindDataset(data.Dataset):
             locations_in[part] = loc_in
         return locations_gt, locations_in
 
-    def create_distortion(self, Distortion):
-        if Distortion is None:
-            return None
-        return GeneralDistortion(Distortion.get('args'))
-
     def __getitem__(self, index):
         # if self.file_client is None:
         #     self.file_client = FileClient(self.io_backend_opt.pop('type'), **self.io_backend_opt)
@@ -252,15 +242,8 @@ class FFHQBlindDataset(data.Dataset):
             pass
         else:
             img_in = img_gt
-        if self.use_distortion and not self.gen_inpaint_mask:
-            img_in = (img_in*255).astype('uint8')
-            img_in = self.distortion(img_in)
-            img_in = np.float32(np.array(img_in) / 255.)
-            
-            # resize to in_size
-            img_in = cv2.resize(img_in, (self.in_size, self.in_size), interpolation=cv2.INTER_LINEAR)
 
-        elif self.use_corrupt and not self.gen_inpaint_mask:
+        if self.use_corrupt and not self.gen_inpaint_mask:
             # motion blur
             if self.use_motion_kernel and random.random() < self.motion_kernel_prob:
                 m_i = random.randint(0,31)

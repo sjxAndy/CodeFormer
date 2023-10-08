@@ -149,6 +149,7 @@ class Tester():
         self.original_size = self.lq.size()
         assert b == 1
         crop_size = self.opt['val'].get('crop_size')
+        print('cropsize:', crop_size)
         # step_j = self.opt['val'].get('step_j', crop_size)
         # step_i = self.opt['val'].get('step_i', crop_size)
         ##adaptive step_i, step_j

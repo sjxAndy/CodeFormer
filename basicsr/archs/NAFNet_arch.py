@@ -18,6 +18,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from basicsr.archs.arch_util import LayerNorm2d
 from basicsr.archs.local_arch import Local_Base
+from basicsr.utils.registry import ARCH_REGISTRY
+
 
 class SimpleGate(nn.Module):
     def forward(self, x):
@@ -442,6 +444,8 @@ class NAFNet(nn.Module):
         x = F.pad(x, (0, mod_pad_w, 0, mod_pad_h))
         return x
 
+
+@ARCH_REGISTRY.register()
 class NAFNetLocal(Local_Base, NAFNet):
     def __init__(self, *args, train_size=(1, 3, 256, 256), fast_imp=False, **kwargs):
         Local_Base.__init__(self)

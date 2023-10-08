@@ -3,6 +3,8 @@ VQGAN code, adapted from the original created by the Unleashing Transformers aut
 https://github.com/samb-t/unleashing-transformers/blob/master/models/vqgan.py
 
 '''
+import os
+import random
 import numpy as np
 import torch
 import torch.nn as nn
@@ -10,6 +12,7 @@ import torch.nn.functional as F
 import copy
 from basicsr.utils import get_root_logger
 from basicsr.utils.registry import ARCH_REGISTRY
+from basicsr.archs.generate_multi_PSF import MultiPSF
 
 def normalize(in_channels):
     return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
@@ -22,16 +25,37 @@ def swish(x):
 
 #  Define VQVAE classes
 class VectorQuantizer(nn.Module):
-    def __init__(self, codebook_size, emb_dim, beta):
+    def __init__(self, codebook_size, emb_dim, beta, initialize=False):
         super(VectorQuantizer, self).__init__()
         self.codebook_size = codebook_size  # number of embeddings
         self.emb_dim = emb_dim  # dimension of embedding
         self.beta = beta  # commitment cost used in loss term, beta * ||z_e(x)-sg[e]||^2
-        self.embedding = nn.Embedding(self.codebook_size, self.emb_dim)
-        self.embedding.weight.data.uniform_(-1.0 / self.codebook_size, 1.0 / self.codebook_size)
+        if not initialize:
+            self.embedding = nn.Embedding(self.codebook_size, self.emb_dim)
+            self.embedding.weight.data.uniform_(-1.0 / self.codebook_size, 1.0 / self.codebook_size)
+        else:
+            # psf = MultiPSF(canvas=19, num=codebook_size)
+            # psfs = psf.fit()
+            # weight = torch.FloatTensor(psfs)
+            # weight = weight.view(weight.shape[0], -1)
+            # self.embedding = nn.Embedding.from_pretrained(weight)
+            all_npy = []
+            for fname in os.listdir('/mnt/lustre/sunjixiang1/code/CodeFormer/tmp/kernels'):
+                if fname.endswith('.npy'):
+                    f = np.load(os.path.join('/mnt/lustre/sunjixiang1/code/CodeFormer/tmp/kernels', fname)).squeeze()
+                    all_npy.append(f)
+            all_npy = np.concatenate(np.array(all_npy))
+            rand_idx = [random.choice(list(np.arange(all_npy.shape[0]))) for i in range(self.codebook_size)]
+            # rand_idx = random.sample(list(np.arange(all_npy.shape[0])), self.codebook_size)
+            weight = torch.FloatTensor(all_npy[rand_idx])
+            weight = weight.view(weight.shape[0], -1)
+            self.embedding = nn.Embedding.from_pretrained(weight)
+
+
 
     def forward(self, z):
         # reshape z -> (batch, height, width, channel) and flatten
+        # print('z shape', z.shape)
         z = z.permute(0, 2, 3, 1).contiguous()
         z_flattened = z.view(-1, self.emb_dim)
 
@@ -759,3 +783,21 @@ class VQGANDiscriminator(nn.Module):
 
     def forward(self, x):
         return self.main(x)
+    
+
+if __name__ == '__main__':
+    input1 = torch.rand(2, 3, 512, 512).cuda()
+
+
+    net = Encoder(
+        3,
+        64,
+        256,
+        [1, 2, 2, 4, 4, 8],
+        2,
+        512,
+        [16]
+    ).cuda()
+    kernel = net(input1)
+    print(kernel.size())
+

@@ -98,10 +98,11 @@ class Fuse_sft_block(nn.Module):
                     nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=1))
 
     def forward(self, enc_feat, dec_feat, w=1):
+        enc_old = enc_feat
         enc_feat = self.encode_enc(torch.cat([enc_feat, dec_feat], dim=1))
         scale = self.scale(enc_feat)
         shift = self.shift(enc_feat)
-        residual = w * (dec_feat * scale + shift)
+        residual = w * (enc_old * scale + shift)
         out = dec_feat + residual
         return out
 
@@ -122,7 +123,7 @@ class Baseline(nn.Module):
         self.downs = nn.ModuleList()
 
         chan = width
-        self.fuse_convs_dict = []
+        self.fuse_convs_dict = nn.ModuleList()
 
         for num in enc_blk_nums:
             self.encoders.append(

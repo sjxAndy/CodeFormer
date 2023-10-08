@@ -1,0 +1,2 @@
+srun -p pixel -x SH-IDC1-10-198-6-[55,150] --mpi=pmi2 --job-name=ft_naf --gres=gpu:2 --ntasks=2 --ntasks-per-node=2 --cpus-per-task=5 --kill-on-bad-exit=1 --quotatype=spot \
+python -u basicsr/train.py -opt options/ft_naf.yml --launcher="slurm"

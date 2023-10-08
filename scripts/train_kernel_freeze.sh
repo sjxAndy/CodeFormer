@@ -1,0 +1,2 @@
+srun -p pixel -x SH-IDC1-10-198-6-[47,60,76] --mpi=pmi2 --job-name=train_kernel --gres=gpu:4 --ntasks=4 --ntasks-per-node=4 --cpus-per-task=5 --kill-on-bad-exit=1 --quotatype=spot \
+python -u basicsr/train.py -opt options/Kernel_freeze.yml --launcher="slurm"

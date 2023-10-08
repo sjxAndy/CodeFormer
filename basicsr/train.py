@@ -168,6 +168,9 @@ def train_pipeline(root_path):
     data_time, iter_time = time.time(), time.time()
     start_time = time.time()
 
+    if opt.get('val_start', False):
+        model.validation(val_loader, current_iter, tb_logger, opt['val']['save_img'])
+
     for epoch in range(start_epoch, total_epochs + 1):
         train_sampler.set_epoch(epoch)
         prefetcher.reset()

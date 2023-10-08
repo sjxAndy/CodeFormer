@@ -1,0 +1,2 @@
+srun -p pixel -x SH-IDC1-10-198-6-60 --mpi=pmi2 --job-name=train_kernel --gres=gpu:8 --ntasks=8 --ntasks-per-node=8 --cpus-per-task=5 --kill-on-bad-exit=1 --quotatype=spot \
+python -u basicsr/train.py -opt options/Kernel_decoder_weight_l2.yml --launcher="slurm"

@@ -1,0 +1,2 @@
+srun -p pixel --mpi=pmi2 --job-name=train_kernel_shape --gres=gpu:8 --ntasks=8 --ntasks-per-node=8 --cpus-per-task=5 --kill-on-bad-exit=1 --quotatype=spot \
+python -u basicsr/train.py -opt options/Kernel_weight_shape_ft.yml --launcher="slurm"

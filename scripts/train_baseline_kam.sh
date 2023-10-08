@@ -1,0 +1,2 @@
+srun -p pixel --mpi=pmi2 --job-name=train_kam --gres=gpu:4 --ntasks=4 --ntasks-per-node=4 --cpus-per-task=5 --kill-on-bad-exit=1 --quotatype=spot \
+python -u basicsr/train.py -opt options/Baseline-kam-width64.yml --launcher="slurm"

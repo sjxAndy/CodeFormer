@@ -15,7 +15,6 @@ from basicsr.data.transforms import augment
 from basicsr.data.data_util import paths_from_folder, brush_stroke_mask, random_ff_mask
 from basicsr.utils import FileClient, get_root_logger, imfrombytes, img2tensor
 from basicsr.utils.registry import DATASET_REGISTRY
-from .distortion.general_distortion import GeneralDistortion
 
 @DATASET_REGISTRY.register()
 class FFHQBlurDataset(data.Dataset):
@@ -204,11 +203,6 @@ class FFHQBlurDataset(data.Dataset):
             loc_in = loc/(self.gt_size//self.in_size)
             locations_in[part] = loc_in
         return locations_gt, locations_in
-
-    def create_distortion(self, Distortion):
-        if Distortion is None:
-            return None
-        return GeneralDistortion(Distortion.get('args'))
 
     def __getitem__(self, index):
         # print(self.paths[0:10], self.blur_paths[0:10])

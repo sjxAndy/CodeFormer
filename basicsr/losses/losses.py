@@ -435,6 +435,44 @@ class IdentityLoss(nn.Module):
         return self.loss_weight * cosine_loss(pred, target, torch.ones_like(pred), reduction=self.reduction)
 
 
+def get_gaussian_kernel(kernel_size=19, sigma=5, channels=1):
+    x_coord = torch.arange(kernel_size)
+    x_grid = x_coord.repeat(kernel_size).view(kernel_size, kernel_size)
+    y_grid = x_grid.t()
+    xy_grid = torch.stack([x_grid, y_grid], dim=-1).float()
+
+    mean = (kernel_size - 1)/2.
+    variance = sigma**2.
+    gaussian_kernel = (1./(2.*math.pi*variance)) *\
+                      torch.exp(
+                          -torch.sum((xy_grid - mean)**2., dim=-1) /\
+                          (2*variance)
+                      )
+    gaussian_kernel = gaussian_kernel.view(kernel_size, kernel_size)
+    gaussian_kernel = torch.max(gaussian_kernel) - gaussian_kernel
+    gaussian_kernel = gaussian_kernel / torch.sum(gaussian_kernel)
+
+    return gaussian_kernel
+
+
+@LOSS_REGISTRY.register()
+class GaussianLoss(nn.Module):
+
+    def __init__(self, loss_weight=1.0, reduction='mean'):
+        super(GaussianLoss, self).__init__()
+        if reduction not in ['mean']:
+            raise ValueError(f'Unsupported reduction mode: {reduction}. ' f'Supported ones are: {_reduction_modes}')
+
+        self.loss_weight = loss_weight
+        self.reduction = reduction
+
+    def forward(self, pred, weight=None, **kwargs):
+        kernel = get_gaussian_kernel(19, 5).view((-1, 1)).to(pred.device)
+        pred = pred.view(-1, pred.shape[-2] * pred.shape[-1])
+        loss = torch.matmul(pred, kernel).mean()
+        return self.loss_weight * loss
+
+
 def r1_penalty(real_pred, real_img):
     """R1 regularization for discriminator. The core idea is to
         penalize the gradient on real data alone: when the
